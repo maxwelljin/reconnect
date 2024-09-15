@@ -1,105 +1,150 @@
+import fetch from 'node-fetch'; // Import node-fetch for ES modules
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 
+// Initialize OpenAI with your API key
 const openai = new OpenAI({
-  apiKey: , // Ensure your API key is set in your environment variables
+  apiKey: "", 
 });
 
-export default async function handler(req, res) {
-  const { videoFilePath } = req.query;
+// Suno API URL and headers
+const sunoUrl = 'https://studio-api.suno.ai/api/external/generate/';
+const sunoHeaders = {
+  'Accept': '/',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Affiliate-Id': 'undefined',
+  'Authorization': `Bearer `, // Replace with your actual Suno API token
+  'Content-Type': 'text/plain;charset=UTF-8',
+  'Origin': 'https://suno.com/',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+};
 
-  if (req.method === "GET") {
-    if (!videoFilePath) {
-      return res.status(400).json({ error: "Video file path is required." });
-    }
+// Function to generate music using Suno API
+async function generateMusic(prompt) {
+  console.log(prompt)
+  const body = JSON.stringify({
+    "prompt": "This is a song about HackMIT\n yeah HackMIT\n yeah HackMIT\n la la la",
+    "tags": "pop",
+    "topic": prompt,
+    "mv": "chirp-v3-5"
+  });
 
-    try {
-      // The directory where frames are stored (public/frames/{videoFilePath})
-      const framesDir = path.join(process.cwd(), "public", "frames", videoFilePath);
+  try {
+    const response = await fetch(sunoUrl, {
+      method: 'POST',
+      headers: sunoHeaders,
+      body: body
+    });
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error generating music:', error);
+  }
+}
 
-      // Check if the directory exists
-      if (!fs.existsSync(framesDir)) {
-        return res.status(404).json({ error: "Frames directory not found." });
-      }
+// OpenAI image description to lyric creation function
+async function generateLyricsFromImages(videoFilePath) {
+  // The directory where frames are stored (public/frames/{videoFilePath})
+  const framesDir = path.join(process.cwd(), "public", "frames", videoFilePath);
 
-      // Read the files in the directory
-      const files = fs.readdirSync(framesDir);
+  if (!fs.existsSync(framesDir)) {
+    throw new Error("Frames directory not found.");
+  }
 
-      if (files.length === 0) {
-        return res.status(400).json({ error: "No frames found in the directory." });
-      }
+  const files = fs.readdirSync(framesDir);
+  const imageFiles = files.filter(file => file.endsWith(".jpg") || file.endsWith(".png"));
 
-      // Filter only image files (.jpg or .png)
-      const imageFiles = files.filter(file => file.endsWith(".jpg") || file.endsWith(".png"));
+  if (imageFiles.length === 0) {
+    throw new Error("No image files found.");
+  }
 
-      if (imageFiles.length === 0) {
-        return res.status(400).json({ error: "No image files found in the directory." });
-      }
+  const imageDescriptions = await Promise.all(
+    imageFiles.map(async (file) => {
+      const imagePath = path.join(framesDir, file);
+      
+      // Read the image file as base64
+      const base64Image = fs.readFileSync(imagePath, { encoding: "base64" });
 
-      // Process each image file in parallel to get descriptions
-      const imageDescriptions = await Promise.all(
-        imageFiles.map(async (file) => {
-          const imagePath = path.join(framesDir, file);
+      // Create a base64 image URL
+      const base64ImageUrl = `data:image/jpeg;base64,${base64Image}`;
 
-          // Read the image file as base64
-          const base64Image = fs.readFileSync(imagePath, { encoding: "base64" });
-
-          // Create a base64 image URL
-          const base64ImageUrl = `data:image/jpeg;base64,${base64Image}`;
-
-          // Make the request to OpenAI to describe the image
-          const response = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: 'Please describe the contents of the following image.'
-                  },
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: base64ImageUrl
-                    }
-                  }
-                ],
-              },
-            ],
-            max_tokens: 300,
-          });
-
-          // Extract the description from the response
-          const description = response.choices[0]?.message?.content || "No description found.";
-          return description;
-        })
-      );
-
-      // Combine all the descriptions into a single string
-      const combinedDescription = imageDescriptions.join(" ");
-
-      // Ask GPT-4 to rewrite the combined description as a beautiful lyric
-      const lyricResponse = await openai.chat.completions.create({
+      // Make the request to OpenAI to describe the image
+      const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           {
             role: "user",
-            content: `Here are a series of descriptions: "${combinedDescription}". Can you rewrite these descriptions beautifully in the form of a song lyric?`,
+            content: [
+              {
+                type: "text",
+                text: 'Please describe the contents of the following image.'
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: base64ImageUrl
+                }
+              }
+            ],
           },
         ],
-        max_tokens: 500,
+        max_tokens: 300,
       });
 
-      // Get the lyric response from GPT-4
-      const beautifulLyric = lyricResponse.choices[0]?.message?.content || "No lyric was generated.";
+      // Extract the description from the response
+      const description = response.choices[0]?.message?.content || "No description found.";
+      return description;
+    })
+  );
 
-      // Return the generated lyric to the client
-      res.status(200).json({ lyric: beautifulLyric });
+  // Combine descriptions
+  const combinedDescription = imageDescriptions.join(" ");
+
+  // Ask GPT-4 to generate song lyrics from descriptions
+  const lyricResponse = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "user",
+        content: `Here are a series of descriptions: "${combinedDescription}". Can you rewrite these descriptions beautifully as the context of the lyric, only one sentence`,
+      },
+    ],
+    max_tokens: 500,
+  });
+
+  let beautifulLyric = lyricResponse.choices[0]?.message?.content || "No lyric was generated.";
+
+  // Limit the lyrics to 2000 characters
+  if (beautifulLyric.length > 2000) {
+    beautifulLyric = beautifulLyric.substring(0, 2000);
+  }
+
+  return beautifulLyric;
+}
+
+// Main handler for the API request
+export default async function handler(req, res) {
+  const { videoFilePath } = req.query;
+
+  if (req.method === "GET") {
+    try {
+      // Generate lyrics from OpenAI based on image frames
+      const lyrics = await generateLyricsFromImages(videoFilePath);
+      //const lyrics = "HackMIt is great, hack mit is great!!"
+
+      // Generate music from Suno API
+      const musicData = await generateMusic(lyrics);
+      
+      // Combine and return both results
+      res.status(200).json({
+        musicData,
+        lyrics
+      });
+      
     } catch (error) {
-      console.error("Error reading frames or calling OpenAI:", error);
-      res.status(500).json({ error: "An error occurred while processing the frames." });
+      console.error("Error in handler:", error);
+      res.status(500).json({ error: "An error occurred while processing the request." });
     }
   } else {
     res.status(405).json({ error: "Method not allowed" });
