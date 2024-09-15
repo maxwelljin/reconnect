@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Videos</title>
+    <link rel="stylesheet" href="reconnect.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <a href="index.html" class="logo">Upload Your Videos Here!</a>
+            <nav class="nav">
+                <ul class="nav-list">
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="about.html">About</a></li>
+                    <li><a href="services.html">Services</a></li>
+                    <li><a href="contact.html">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Content of the home page -->
+        
+        <section class="video-upload">
+            <h2>Upload Your Videos</h2>
+            <form action="/upload" method="POST" enctype="multipart/form-data">
+                <label for="videoUpload">Choose a video to upload:</label>
+                <input type="file" id="videoUpload" name="video" accept="video/*" required>
+                <button type="submit">Upload Video</button>
+            </form>
+        </section>
+
+    </main>
+</body>
+</html>
+
