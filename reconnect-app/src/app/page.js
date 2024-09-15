@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link"; // Import Next.js Link
 
 export default function VideoUpload() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploaded, setIsUploaded] = useState(false);
   const [uploadError, setUploadError] = useState(false);
+  const [videoFilePath, setVideoFilePath] = useState(null); // Store video file path
 
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0]);
@@ -29,6 +31,8 @@ export default function VideoUpload() {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        setVideoFilePath(data.filePath); // Assuming backend returns the file path
         setIsUploaded(true);
         console.log("Upload successful!");
       } else {
@@ -101,9 +105,15 @@ export default function VideoUpload() {
         </button>
 
         {isUploaded && (
-          <p className="text-green-600 font-semibold mt-4">
-            Video uploaded successfully!
-          </p>
+          <>
+            <p className="text-green-600 font-semibold mt-4">
+              Video uploaded successfully!
+            </p>
+            {/* Link to the keyframe display page */}
+            <Link href={`/keyframes?videoFilePath=${videoFilePath}`}>
+                View Extracted Keyframes
+            </Link>
+          </>
         )}
 
         {uploadError && (
